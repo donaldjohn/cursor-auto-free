@@ -16,6 +16,18 @@ from get_email_code import EmailVerificationHandler
 from logo import print_logo
 from config import Config
 
+import logging
+import sys
+
+# 配置日志
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(sys.stdout)
+    ]
+)
+
 
 def handle_turnstile(tab):
     logging.info("正在检测 Turnstile 验证...")
@@ -160,7 +172,8 @@ def sign_up_account(browser, tab):
                 break
             if tab.ele("@data-index=0"):
                 logging.info("正在获取邮箱验证码...")
-                code = email_handler.get_verification_code()
+                logging.info("请输入邮件验证码:")
+                code = input("请输入邮件验证码: ").strip()            
                 if not code:
                     logging.error("获取验证码失败")
                     return False
