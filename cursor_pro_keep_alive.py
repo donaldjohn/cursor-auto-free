@@ -386,7 +386,9 @@ if __name__ == "__main__":
         logging.info("正在生成随机账号信息...")
         email_generator = EmailGenerator()
         account = email_generator.generate_email()
+        print(f"account: {account}")
         password = email_generator.default_password
+        print(f"password: {password}")
         first_name = email_generator.default_first_name
         last_name = email_generator.default_last_name
 
