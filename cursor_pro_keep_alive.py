@@ -1,6 +1,11 @@
 import os
+import platform
+import json
+import sys
+from colorama import Fore, Style
 
 from exit_cursor import ExitCursor
+import patch_cursor_get_machine_id
 from reset_machine import MachineIDResetter
 
 os.environ["PYTHONVERBOSE"] = "0"
@@ -15,6 +20,38 @@ from browser_utils import BrowserManager
 from get_email_code import EmailVerificationHandler
 from logo import print_logo
 from config import Config
+from datetime import datetime
+
+# 定义 EMOJI 字典
+EMOJI = {"ERROR": "❌", "WARNING": "⚠️", "INFO": "ℹ️"}
+
+
+def save_screenshot(tab, prefix="turnstile"):
+    """保存截图
+    Args:
+        tab: 浏览器标签页对象
+        prefix: 文件名前缀
+    Returns:
+        str: 截图文件路径
+    """
+    try:
+        # 创建 screenshots 目录
+        screenshot_dir = "screenshots"
+        if not os.path.exists(screenshot_dir):
+            os.makedirs(screenshot_dir)
+
+        # 生成带时间戳的文件名
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"{prefix}_{timestamp}.png"
+        filepath = os.path.join(screenshot_dir, filename)
+
+        # 使用 get_screenshot 方法保存截图
+        tab.get_screenshot(filepath)
+        logging.info(f"已保存截图: {filepath}")
+        return filepath
+    except Exception as e:
+        logging.error(f"截图保存失败: {str(e)}")
+        return None
 
 import logging
 import sys
@@ -31,6 +68,7 @@ logging.basicConfig(
 
 def handle_turnstile(tab):
     logging.info("正在检测 Turnstile 验证...")
+    save_screenshot(tab, "turnstile")
     try:
         while True:
             try:
@@ -48,6 +86,7 @@ def handle_turnstile(tab):
                     challengeCheck.click()
                     time.sleep(2)
                     logging.info("Turnstile 验证通过")
+                    save_screenshot(tab, "turnstile_pass")
                     return True
             except:
                 pass
@@ -61,7 +100,6 @@ def handle_turnstile(tab):
             if tab.ele("Account Settings"):
                 logging.info("验证成功 - 已到达账户设置页面")
                 break
-
             time.sleep(random.uniform(1, 2))
     except Exception as e:
         logging.error(f"Turnstile 验证失败: {str(e)}")
@@ -158,7 +196,6 @@ def sign_up_account(browser, tab):
         logging.error(f"密码设置失败: {str(e)}")
         return False
 
-    time.sleep(random.uniform(1, 3))
     if tab.ele("This email is not available."):
         logging.error("注册失败：邮箱已被使用")
         return False
@@ -229,7 +266,9 @@ class EmailGenerator:
             )
         ),
     ):
-        self.domain = Config().get_domain()
+        configInstance = Config()
+        configInstance.print_config()
+        self.domain = configInstance.get_domain()
         self.default_password = password
         self.default_first_name = self.generate_random_name()
         self.default_last_name = self.generate_random_name()
@@ -237,7 +276,9 @@ class EmailGenerator:
     def generate_random_name(self, length=6):
         """生成随机用户名"""
         first_letter = random.choice("ABCDEFGHIJKLMNOPQRSTUVWXYZ")
-        rest_letters = ''.join(random.choices("abcdefghijklmnopqrstuvwxyz", k=length-1))
+        rest_letters = "".join(
+            random.choices("abcdefghijklmnopqrstuvwxyz", k=length - 1)
+        )
         return first_letter + rest_letters
 
     def generate_email(self, length=8):
@@ -256,18 +297,85 @@ class EmailGenerator:
         }
 
 
+def get_user_agent():
+    """获取user_agent"""
+    try:
+        # 使用JavaScript获取user agent
+        browser_manager = BrowserManager()
+        browser = browser_manager.init_browser()
+        user_agent = browser.latest_tab.run_js("return navigator.userAgent")
+        browser_manager.quit()
+        return user_agent
+    except Exception as e:
+        logging.error(f"获取user agent失败: {str(e)}")
+        return None
+
+
+def check_cursor_version():
+    """检查cursor版本"""
+    pkg_path, main_path = patch_cursor_get_machine_id.get_cursor_paths()
+    with open(pkg_path, "r", encoding="utf-8") as f:
+        version = json.load(f)["version"]
+    return patch_cursor_get_machine_id.version_check(version, min_version="0.45.0")
+
+
+def reset_machine_id(greater_than_0_45):
+    if greater_than_0_45:
+        # 提示请手动执行脚本 https://github.com/chengazhen/cursor-auto-free/blob/main/patch_cursor_get_machine_id.py
+        patch_cursor_get_machine_id.patch_cursor_get_machine_id()
+    else:
+        MachineIDResetter().reset_machine_ids()
+
+
 if __name__ == "__main__":
     print_logo()
+    greater_than_0_45 = check_cursor_version()
     browser_manager = None
     try:
         logging.info("\n=== 初始化程序 ===")
-        ExitCursor()
+        # 提示用户选择操作模式
+        print("\n请选择操作模式:")
+        print("1. 仅重置机器码")
+        print("2. 完整注册流程")
+
+        while True:
+            try:
+                choice = int(input("请输入选项 (1 或 2): ").strip())
+                if choice in [1, 2]:
+                    break
+                else:
+                    print("无效的选项,请重新输入")
+            except ValueError:
+                print("请输入有效的数字")
+
+        if choice == 1:
+            # 仅执行重置机器码
+            reset_machine_id(greater_than_0_45)
+            logging.info("机器码重置完成")
+            sys.exit(0)
+
+        # 小于0.45的版本需要打补丁
+        if not greater_than_0_45:
+            ExitCursor()
         logging.info("正在初始化浏览器...")
+
+        # 获取user_agent
+        user_agent = get_user_agent()
+        if not user_agent:
+            logging.error("获取user agent失败，使用默认值")
+            user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+
+        # 剔除user_agent中的"HeadlessChrome"
+        user_agent = user_agent.replace("HeadlessChrome", "Chrome")
+
         browser_manager = BrowserManager()
-        browser = browser_manager.init_browser()
+        browser = browser_manager.init_browser(user_agent)
+
+        # 获取并打印浏览器的user-agent
+        user_agent = browser.latest_tab.run_js("return navigator.userAgent")
 
         logging.info("正在初始化邮箱验证模块...")
-        email_handler = EmailVerificationHandler(browser)
+        email_handler = EmailVerificationHandler()
 
         logging.info("\n=== 配置信息 ===")
         login_url = "https://authenticator.cursor.sh"
@@ -286,6 +394,7 @@ if __name__ == "__main__":
         auto_update_cursor_auth = True
 
         tab = browser.latest_tab
+
         tab.run_js("try { turnstile.reset() } catch(e) { }")
 
         logging.info("\n=== 开始注册流程 ===")
@@ -302,7 +411,7 @@ if __name__ == "__main__":
                 )
 
                 logging.info("重置机器码...")
-                MachineIDResetter().reset_machine_ids()
+                reset_machine_id(greater_than_0_45)
                 logging.info("所有操作已完成")
             else:
                 logging.error("获取会话令牌失败，注册流程未完成")
