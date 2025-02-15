@@ -210,10 +210,13 @@ def sign_up_account(browser, tab):
             if tab.ele("@data-index=0"):
                 logging.info("正在获取邮箱验证码...")
                 logging.info("请输入邮件验证码:")
-                code = input("请输入邮件验证码: ").strip()            
-                if not code:
-                    logging.error("获取验证码失败")
-                    return False
+                while True:
+                    code = input("请输入邮件验证码: ").strip()
+                    if code:
+                        break
+                    else:
+                        logging.error("获取验证码失败")
+                        return False
 
                 logging.info(f"成功获取验证码: {code}")
                 logging.info("正在输入验证码...")
@@ -386,9 +389,9 @@ if __name__ == "__main__":
         logging.info("正在生成随机账号信息...")
         email_generator = EmailGenerator()
         account = email_generator.generate_email()
-        print(f"account: {account}")
+        logging.info(f"account: {account}")
         password = email_generator.default_password
-        print(f"password: {password}")
+        logging.info(f"password: {password}")
         first_name = email_generator.default_first_name
         last_name = email_generator.default_last_name
 
